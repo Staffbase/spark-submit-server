@@ -1,35 +1,38 @@
 package main
 
 import (
-	"flag"
 	"fmt"
 	"io/ioutil"
 	"net/http"
 	"os"
 	"path"
+	"path/filepath"
 	"strings"
 
+	"github.com/alecthomas/kong"
 	"github.com/go-chi/chi/v5"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"gopkg.in/yaml.v2"
 )
 
-var (
-	sparkHomePath   = flag.String("spark-home", "", "spark home directory")
-	sparkConfigDir  = flag.String("spark-conf-dir", "", "directory with spark configuration presets")
-	master          = flag.String("master", "", "spark master address")
-	debugSubmit     = flag.Bool("debug-submit", false, "write spark-submit output to logger")
-	devMode         = flag.Bool("dev-mode", false, "sets the logger output to development config")
-	enableDebugLogs = flag.Bool("debug", false, "enables debug logs")
-)
-
-func main() {
-	flag.Parse()
-	setup()
+type mainCmd struct {
+	SparkHome    string `required:"" help:"spark home directory" env:"SPARK_HOME"`
+	SparkConfDir string `required:"" help:"directory with spark configuration presets" env:"SPARK_CONF_DIR"`
+	Master       string `required:"" help:"spark master address" env:"SPARK_MASTER"`
+	DebugSubmit  bool   `help:"write spark-submit output to logger" env:"DEBUG_SPARK_SUBMIT"`
+	DevMode      bool   `help:"sets the logger output to development config"`
+	Debug        bool   `help:"enables debug logs"`
 }
 
-var presets map[string]configurationPreset = make(map[string]configurationPreset)
+var CLI struct {
+	Main mainCmd `cmd:"" default:"withargs" help:"start the web-server"`
+}
+
+func main() {
+	kong.Parse(&CLI)
+	CLI.Main.Run()
+}
 
 type configurationPreset struct {
 	Main      string            `yaml:"main"`
@@ -37,32 +40,23 @@ type configurationPreset struct {
 	SparkConf map[string]string `yaml:"sparkConf"`
 }
 
-func setup() {
-	setupLogger()
+var presets map[string]configurationPreset = make(map[string]configurationPreset)
+var sparkSubmitPath string
 
-	if *master == "" {
-		zap.L().Fatal("spark master is not specified, please use --master")
+func (cmd *mainCmd) Run() {
+	cmd.setupLogger()
+	if _, err := os.Stat(cmd.SparkHome); os.IsNotExist(err) {
+		zap.L().Fatal("directory for spark home found", zap.String("sparkHomePath", cmd.SparkHome))
+	}
+	sparkSubmitPath = filepath.Join(cmd.SparkHome, "/bin/spark-submit")
+
+	if _, err := os.Stat(cmd.SparkConfDir); os.IsNotExist(err) {
+		zap.L().Fatal("directory for spark configuration presets not found", zap.String("sparkConfigDir", cmd.SparkConfDir))
 	}
 
-	if *sparkHomePath == "" {
-		zap.L().Fatal("spark home is not specified, please use --spark-home")
-	}
-
-	if _, err := os.Stat(*sparkHomePath); os.IsNotExist(err) {
-		zap.L().Fatal("directory for spark home found", zap.String("sparkHomePath", *sparkHomePath))
-	}
-
-	if *sparkConfigDir == "" {
-		zap.L().Fatal("spark config directory is not specified, please use --spark-conf-dir")
-	}
-
-	if _, err := os.Stat(*sparkConfigDir); os.IsNotExist(err) {
-		zap.L().Fatal("directory for spark configuration presets not found", zap.String("sparkConfigDir", *sparkHomePath))
-	}
-
-	files, err := ioutil.ReadDir(*sparkConfigDir)
+	files, err := ioutil.ReadDir(cmd.SparkConfDir)
 	if err != nil {
-		zap.L().Fatal("error reading preset directory", zap.String("sparkConfigDir", *sparkHomePath))
+		zap.L().Fatal("error reading preset directory", zap.String("sparkConfigDir", cmd.SparkConfDir))
 	}
 
 	for _, file := range files {
@@ -75,7 +69,7 @@ func setup() {
 			continue
 		}
 
-		confPath := path.Join(*sparkConfigDir, fn)
+		confPath := path.Join(cmd.SparkConfDir, fn)
 		rawConf, err := os.ReadFile(confPath)
 		if err != nil {
 			zap.L().Error("error reading config", zap.Error(err), zap.String("configPath", confPath))
@@ -95,25 +89,25 @@ func setup() {
 	}
 
 	if len(presets) == 0 {
-		zap.L().Fatal("no presets found, please add some presets to the spark configuration preset directory", zap.String("sparkConfigDir", *sparkConfigDir))
+		zap.L().Fatal("no presets found, please add some presets to the spark configuration preset directory", zap.String("sparkConfigDir", cmd.SparkConfDir))
 	}
 	zap.L().Info("presets initialized", zap.Int("presetCount", len(presets)))
 
 	r := chi.NewRouter()
-	r.Post("/", handleSubmit)
+	r.Post("/", handleSubmit(cmd.Master, cmd.DebugSubmit))
 	zap.L().Info("start http server on port 3000")
 	if err := http.ListenAndServe(":7070", r); err != nil {
 		zap.L().Fatal("couldn't start webserver", zap.Error(err))
 	}
 }
 
-func setupLogger() {
+func (cmd mainCmd) setupLogger() {
 	config := zap.NewProductionConfig()
-	if *devMode {
+	if cmd.DevMode {
 		config = zap.NewDevelopmentConfig()
 	}
 
-	if *enableDebugLogs {
+	if cmd.Debug {
 		config.Level = zap.NewAtomicLevelAt(zap.DebugLevel)
 	}
 	config.EncoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
