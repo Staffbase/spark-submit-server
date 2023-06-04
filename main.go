@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"io/ioutil"
 	"net/http"
 	"os"
 	"path"
@@ -54,7 +53,7 @@ func (cmd *mainCmd) Run() {
 		zap.L().Fatal("directory for spark configuration presets not found", zap.String("sparkConfigDir", cmd.SparkConfDir))
 	}
 
-	files, err := ioutil.ReadDir(cmd.SparkConfDir)
+	files, err := os.ReadDir(cmd.SparkConfDir)
 	if err != nil {
 		zap.L().Fatal("error reading preset directory", zap.String("sparkConfigDir", cmd.SparkConfDir))
 	}
