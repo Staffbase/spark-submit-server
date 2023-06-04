@@ -93,6 +93,7 @@ func (cmd *mainCmd) Run() {
 	zap.L().Info("presets initialized", zap.Int("presetCount", len(presets)))
 
 	r := chi.NewRouter()
+	r.Get("/health", handleHealth)
 	r.Post("/", handleSubmit(cmd.Master, cmd.DebugSubmit))
 	zap.L().Info("start http server on port 3000")
 	if err := http.ListenAndServe(":7070", r); err != nil {
