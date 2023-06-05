@@ -44,7 +44,6 @@ func InternelServerError(message string) *HTTPError {
 
 func Wrap(fn func(w http.ResponseWriter, r *http.Request) error) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		zap.L().Info("got request")
 		err := fn(w, r)
 		if err != nil {
 			if httpError, ok := err.(*HTTPError); ok {
