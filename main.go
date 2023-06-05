@@ -16,7 +16,7 @@ import (
 )
 
 type mainCmd struct {
-	SparkHome    string `required:"" help:"spark home directory" env:"SPARK_HOME"`
+	SparkHome    string `required:"" default:"/opt/spark" help:"spark home directory" env:"SPARK_HOME"`
 	SparkConfDir string `required:"" help:"directory with spark configuration presets" env:"SPARK_CONF_DIR"`
 	Master       string `required:"" help:"spark master address" env:"SPARK_MASTER"`
 	DebugSubmit  bool   `help:"write spark-submit output to logger" env:"DEBUG_SPARK_SUBMIT"`
