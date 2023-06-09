@@ -21,7 +21,7 @@ type mainCmd struct {
 	Master       string `required:"" help:"spark master address" env:"SPARK_MASTER"`
 	DebugSubmit  bool   `help:"write spark-submit output to logger" env:"DEBUG_SPARK_SUBMIT"`
 	DevMode      bool   `help:"sets the logger output to development config"`
-	Debug        bool   `help:"enables debug logs"`
+	Debug        bool   `help:"enables debug logs" env:"DEBUG"`
 }
 
 var CLI struct {
