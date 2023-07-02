@@ -1,5 +1,5 @@
 main: local:////opt/spark/examples/src/main/python/pi.py
-args: ["1000"] 
+args: ["10000000"] 
 sparkConf:
   spark.kubernetes.namespace: spark
   spark.kubernetes.container.image: apache/spark:3.4.0-python3

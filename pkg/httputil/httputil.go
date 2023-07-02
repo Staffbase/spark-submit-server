@@ -42,6 +42,10 @@ func InternelServerError(message string) *HTTPError {
 	return &HTTPError{http.StatusInternalServerError, message}
 }
 
+func NotFoundError(message string) *HTTPError {
+	return &HTTPError{http.StatusNotFound, message}
+}
+
 func Wrap(fn func(w http.ResponseWriter, r *http.Request) error) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		err := fn(w, r)
@@ -54,7 +58,7 @@ func Wrap(fn func(w http.ResponseWriter, r *http.Request) error) http.HandlerFun
 				return
 			} else {
 				zap.L().Error("unexpected error returned in handler", zap.Error(err))
-				render.Status(r, httpError.statusCode)
+				render.Status(r, http.StatusInternalServerError)
 				return
 			}
 		}
