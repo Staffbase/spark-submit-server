@@ -17,7 +17,13 @@ var HandleHealth http.HandlerFunc = httputil.Wrap(func(w http.ResponseWriter, r 
 	return nil
 })
 
-var HandleSubmit = func(s *spark.Spark) http.HandlerFunc {
+type Spark interface {
+	Submit(preset string) error
+	Kill(namespace, name string)
+	Status(namespace, name string) string
+}
+
+var HandleSubmit = func(s Spark) http.HandlerFunc {
 	return httputil.Wrap(func(w http.ResponseWriter, r *http.Request) error {
 		preset := r.URL.Query().Get("preset")
 		if preset == "" {
@@ -37,7 +43,7 @@ var HandleSubmit = func(s *spark.Spark) http.HandlerFunc {
 	})
 }
 
-var HandleKill = func(s *spark.Spark) http.HandlerFunc {
+var HandleKill = func(s Spark) http.HandlerFunc {
 	return httputil.Wrap(func(w http.ResponseWriter, r *http.Request) error {
 		namespace := r.URL.Query().Get("namespace")
 		if namespace == "" {
@@ -54,7 +60,7 @@ var HandleKill = func(s *spark.Spark) http.HandlerFunc {
 	})
 }
 
-var HandleStatus = func(s *spark.Spark) http.HandlerFunc {
+var HandleStatus = func(s Spark) http.HandlerFunc {
 	return httputil.Wrap(func(w http.ResponseWriter, r *http.Request) error {
 		namespace := r.URL.Query().Get("namespace")
 		if namespace == "" {

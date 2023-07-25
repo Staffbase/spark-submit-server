@@ -22,7 +22,7 @@ func (e *HTTPError) Status() int {
 }
 
 func (e *HTTPError) Error() string {
-	message := fmt.Sprintf("status: %d", e.statusCode)
+	message := fmt.Sprintf("status: %d", e.Status())
 	if e.message != "" {
 		message = fmt.Sprintf("%s - %s", message, e.message)
 	}
@@ -46,19 +46,21 @@ func NotFoundError(message string) *HTTPError {
 	return &HTTPError{http.StatusNotFound, message}
 }
 
+type errorResponse struct {
+	Error string `json:"error"`
+}
+
 func Wrap(fn func(w http.ResponseWriter, r *http.Request) error) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		err := fn(w, r)
-		if err != nil {
+		if err := fn(w, r); err != nil {
 			if httpError, ok := err.(*HTTPError); ok {
-				render.Status(r, httpError.statusCode)
-				render.JSON(w, r, struct {
-					Error string `json:"error"`
-				}{httpError.message})
+				render.Status(r, httpError.Status())
+				render.JSON(w, r, errorResponse{httpError.message})
 				return
 			} else {
 				zap.L().Error("unexpected error returned in handler", zap.Error(err))
 				render.Status(r, http.StatusInternalServerError)
+				render.JSON(w, r, errorResponse{"unexpected error"})
 				return
 			}
 		}

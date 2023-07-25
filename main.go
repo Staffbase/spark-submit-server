@@ -33,7 +33,10 @@ func main() {
 
 func (cmd *mainCmd) Run() {
 	cmd.setupLogger()
-	s := spark.New(cmd.SparkHome, cmd.SparkConfDir, cmd.Master, cmd.DebugSubmit)
+	s, err := spark.New(cmd.SparkHome, cmd.SparkConfDir, cmd.Master, cmd.DebugSubmit)
+	if err != nil {
+		zap.L().Fatal("couldn't initialize spark dependency", zap.Error(err))
+	}
 	r := chi.NewRouter()
 	r.Get("/health", handlers.HandleHealth)
 	r.Post("/", handlers.HandleSubmit(s))
