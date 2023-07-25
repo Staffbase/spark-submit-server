@@ -27,7 +27,7 @@ type configurationPreset struct {
 	SparkConf map[string]string `yaml:"sparkConf"`
 }
 
-func New(sparkHome, sparkConfDir, master string, debug bool) *Spark {
+func New(sparkHome, sparkConfDir, master string, debug bool) (*Spark, error) {
 	spark := Spark{
 		presets: make(map[string]configurationPreset),
 		master:  master,
@@ -35,17 +35,17 @@ func New(sparkHome, sparkConfDir, master string, debug bool) *Spark {
 	}
 
 	if _, err := os.Stat(sparkHome); os.IsNotExist(err) {
-		zap.L().Fatal("directory for spark home found", zap.String("path", sparkHome))
+		return nil, fmt.Errorf(`directory for spark home found ("%s")`, sparkHome)
 	}
 	spark.binaryPath = filepath.Join(sparkHome, "/bin/spark-submit")
 
 	if _, err := os.Stat(sparkConfDir); os.IsNotExist(err) {
-		zap.L().Fatal("directory for spark configuration presets not found", zap.String("path", sparkConfDir))
+		return nil, fmt.Errorf(`directory for spark configuration presets not found ("%s")`, sparkConfDir)
 	}
 
 	files, err := os.ReadDir(sparkConfDir)
 	if err != nil {
-		zap.L().Fatal("error reading preset directory", zap.String("path", sparkConfDir))
+		return nil, fmt.Errorf(`error reading preset directory ("%s"), %w`, sparkConfDir, err)
 	}
 
 	for _, file := range files {
@@ -78,22 +78,20 @@ func New(sparkHome, sparkConfDir, master string, debug bool) *Spark {
 	}
 
 	if len(spark.presets) == 0 {
-		zap.L().Fatal("no presets found, please add some presets to the spark configuration preset directory", zap.String("path", sparkConfDir))
+		return nil, fmt.Errorf(`no presets found, please add some presets to the spark configuration preset directory: "%s"`, sparkConfDir)
 	}
 	zap.L().Info("presets initialized", zap.Int("presetCount", len(spark.presets)))
 
-	return &spark
+	return &spark, nil
 }
 
 var PresetNotFoundError error = fmt.Errorf("preset not found")
 
-func (s *Spark) Submit(presetName string) error {
+func (s *Spark) submitArgs(presetName string) ([]string, error) {
 	preset, ok := s.presets[presetName]
 	if !ok {
-		return PresetNotFoundError
+		return nil, PresetNotFoundError
 	}
-
-	zap.L().Info("submit with args", zap.Any("args", preset))
 	args := make([]string, 0)
 	args = append(args, fmt.Sprintf("--master=%s", s.master))
 	args = append(args, "--deploy-mode=cluster")
@@ -103,23 +101,36 @@ func (s *Spark) Submit(presetName string) error {
 	}
 	args = append(args, preset.Main)
 	args = append(args, preset.Args...)
+	return args, nil
+}
+
+func (s *Spark) Submit(presetName string) error {
+	args, err := s.submitArgs(presetName)
+	if err != nil {
+		return fmt.Errorf("couldn't build submit args, %w", err)
+	}
+
+	zap.L().Info("submit with args", zap.Any("args", args))
 	go s.exec(args)
 	return nil
 }
 
-func (s *Spark) Kill(namespace, name string) {
+func (s *Spark) buildArgs(kind string, namespace, name string) []string {
 	args := make([]string, 0)
 	args = append(args, fmt.Sprintf("--master=%s", s.master))
-	args = append(args, fmt.Sprintf("--kill=%s:%s", namespace, name))
-	go s.exec(args)
+	args = append(args, fmt.Sprintf("--%s=%s:%s", kind, namespace, name))
+	return args
+}
+
+func (s *Spark) Kill(namespace, name string) {
+	s.exec(s.buildArgs("kill", namespace, name))
 }
 
 func (s *Spark) Status(namespace, name string) string {
-	args := make([]string, 0)
-	args = append(args, fmt.Sprintf("--master=%s", s.master))
-	args = append(args, fmt.Sprintf("--status=%s:%s", namespace, name))
-	cmd := exec.Command(s.binaryPath, args...)
+	args := s.buildArgs("status", namespace, name)
 	zap.L().Info("spark-submit", zap.Strings("args", args))
+
+	cmd := exec.Command(s.binaryPath, args...)
 	var buffer bytes.Buffer
 	cmd.Stdout = &buffer
 	cmd.Stderr = &buffer
