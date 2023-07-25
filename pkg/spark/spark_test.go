@@ -6,17 +6,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// mockExecutor implements a mock for the executor interface
-// this implementation captures the args slice when invoking mockExecutor.exec(args)
-type mockExecutor struct {
-	captured []string
-}
-
-func (me *mockExecutor) exec(args []string) {
-	// override old args
-	me.captured = args
-}
-
 func TestSpark(t *testing.T) {
 	t.Run("should be able to read spark templates", func(t *testing.T) {
 		s, err := New(".", "../../example/sparkConf", "", false)
