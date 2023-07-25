@@ -4,8 +4,8 @@ go 1.20
 
 require (
 	github.com/alecthomas/kong v0.8.0
-	github.com/go-chi/chi/v5 v5.0.8
-	github.com/go-chi/render v1.0.2
+	github.com/go-chi/chi/v5 v5.0.10
+	github.com/go-chi/render v1.0.3
 	github.com/stretchr/testify v1.8.1
 	go.uber.org/zap v1.24.0
 	gopkg.in/yaml.v2 v2.4.0
