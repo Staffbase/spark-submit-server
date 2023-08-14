@@ -2,6 +2,8 @@
 
 lightweight go server that exposes [`spark-submit`](https://spark.apache.org/docs/latest/submitting-applications.html)
 
+![spark-submit-server architecture overview](spark-submit-server.drawio.png)
+
 ## Run with a kind cluster
 
 1. create the cluster
