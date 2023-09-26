@@ -23,6 +23,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapio"
 	"gopkg.in/yaml.v2"
@@ -125,7 +127,7 @@ func (s *Spark) Submit(presetName string) error {
 	}
 
 	zap.L().Info("submit with args", zap.Any("args", args))
-	go s.exec(args)
+	go s.exec("submit", args)
 	return nil
 }
 
@@ -137,7 +139,8 @@ func (s *Spark) buildArgs(kind string, namespace, name string) []string {
 }
 
 func (s *Spark) Kill(namespace, name string) {
-	s.exec(s.buildArgs("kill", namespace, name))
+	kind := "kill"
+	s.exec(kind, s.buildArgs(kind, namespace, name))
 }
 
 func (s *Spark) Status(namespace, name string) string {
@@ -154,7 +157,12 @@ func (s *Spark) Status(namespace, name string) string {
 	return buffer.String()
 }
 
-func (s *Spark) exec(args []string) {
+var execMetrics = promauto.NewCounterVec(prometheus.CounterOpts{
+	Name: "spark_exec_total",
+	Help: "The total number of spark-submit runs",
+}, []string{"kind", "status"})
+
+func (s *Spark) exec(kind string, args []string) {
 	cmd := exec.Command(s.binaryPath, args...)
 	zap.L().Info("spark-submit", zap.Strings("args", args))
 	if s.debug {
@@ -168,8 +176,15 @@ func (s *Spark) exec(args []string) {
 		return cmd.Run()
 	}); err != nil {
 		zap.L().Error("spark submit failed with retries", zap.Error(err))
+		execMetrics.WithLabelValues("failure").Inc()
 	}
+	execMetrics.WithLabelValues("success").Inc()
 }
+
+var retryMetrics = promauto.NewCounter(prometheus.CounterOpts{
+	Name: "retry_total",
+	Help: "The total number of retries",
+})
 
 func retry(retries int, initialDelay time.Duration, mult int, maxWait time.Duration, fn func() error) error {
 	delay := initialDelay
@@ -182,6 +197,7 @@ func retry(retries int, initialDelay time.Duration, mult int, maxWait time.Durat
 				zap.Int("try", try),
 				zap.String("waitDuration", delay.String()),
 			)
+			retryMetrics.Inc()
 		}
 		time.Sleep(delay)
 		delay = delay * time.Duration(mult)

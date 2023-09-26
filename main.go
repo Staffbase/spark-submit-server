@@ -22,6 +22,7 @@ import (
 	"github.com/Staffbase/spark-submit/pkg/spark"
 	"github.com/alecthomas/kong"
 	"github.com/go-chi/chi/v5"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
@@ -52,6 +53,7 @@ func (cmd *mainCmd) Run() {
 	}
 	r := chi.NewRouter()
 	r.Get("/health", handlers.HandleHealth)
+	r.Handle("/metrics", promhttp.Handler())
 	r.Post("/", handlers.HandleSubmit(s))
 	r.Get("/", handlers.HandleStatus(s))
 	r.Delete("/", handlers.HandleKill(s))
