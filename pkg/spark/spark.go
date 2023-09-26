@@ -135,20 +135,22 @@ func (s *Spark) Submit(presetName string) error {
 	if err != nil {
 		return fmt.Errorf("couldn't build submit args, %w", err)
 	}
-
 	zap.L().Info("submit with args", zap.Any("args", args))
-	cmd := exec.Command(s.binaryPath, args...)
-	zap.L().Info("spark-submit", zap.Strings("args", args))
-	if s.debug {
-		writer := &zapio.Writer{Log: zap.L(), Level: zap.DebugLevel}
-		cmd.Stderr = writer
-		cmd.Stdout = writer
-		defer writer.Close()
-	}
-
 	go func() {
-		if err := retry(10, 1*time.Second, 2, 5*time.Minute, func() error {
-			retryCounter.WithLabelValues(presetName).Inc()
+		isFirstRun := true
+		if err := retry(10, 1*time.Second, 2, 3*time.Minute, func() error {
+			cmd := exec.Command(s.binaryPath, args...)
+			zap.L().Info("spark-submit", zap.Strings("args", args))
+			if s.debug {
+				writer := &zapio.Writer{Log: zap.L(), Level: zap.DebugLevel}
+				cmd.Stderr = writer
+				cmd.Stdout = writer
+				defer writer.Close()
+			}
+			if !isFirstRun {
+				retryCounter.WithLabelValues(presetName).Inc()
+			}
+			isFirstRun = false
 			return cmd.Run()
 		}); err != nil {
 			zap.L().Error("spark submit failed with retries", zap.Error(err))
