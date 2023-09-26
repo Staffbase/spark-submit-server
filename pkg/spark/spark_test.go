@@ -14,7 +14,9 @@ limitations under the License.
 package spark
 
 import (
+	"fmt"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -74,5 +76,18 @@ func TestSpark(t *testing.T) {
 			"--master=k8s://http://localhost:8000",
 			"--status=namespace:name",
 		}, args)
+	})
+
+	t.Run("retry works", func(t *testing.T) {
+		try := 0
+		fn := func() error {
+			if try >= 2 {
+				return nil
+			}
+			try++
+			return fmt.Errorf("error in fn")
+		}
+		require.NoError(t, retry(3, 1*time.Nanosecond, 2, 1*time.Second, fn))
+		require.Greater(t, try, 1)
 	})
 }

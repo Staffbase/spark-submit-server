@@ -21,6 +21,7 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapio"
@@ -162,7 +163,31 @@ func (s *Spark) exec(args []string) {
 		cmd.Stdout = writer
 		defer writer.Close()
 	}
-	if err := cmd.Run(); err != nil {
-		zap.L().Error("spark-submit failed", zap.Error(err))
+
+	if err := retry(10, 1*time.Second, 2, 5*time.Minute, func() error {
+		return cmd.Run()
+	}); err != nil {
+		zap.L().Error("spark submit failed with retries", zap.Error(err))
 	}
+}
+
+func retry(retries int, initialDelay time.Duration, mult int, maxWait time.Duration, fn func() error) error {
+	delay := initialDelay
+	for try := 0; try < retries; try++ {
+		if err := fn(); err == nil {
+			return nil
+		} else {
+			zap.L().Warn(
+				"retry failed",
+				zap.Int("try", try),
+				zap.String("waitDuration", delay.String()),
+			)
+		}
+		time.Sleep(delay)
+		delay = delay * time.Duration(mult)
+		if delay >= maxWait {
+			delay = maxWait
+		}
+	}
+	return fmt.Errorf("retries exceeded")
 }
