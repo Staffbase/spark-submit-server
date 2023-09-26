@@ -23,6 +23,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapio"
 	"gopkg.in/yaml.v2"
@@ -118,6 +120,16 @@ func (s *Spark) submitArgs(presetName string) ([]string, error) {
 	return args, nil
 }
 
+var submitCounter = promauto.NewCounterVec(prometheus.CounterOpts{
+	Name: "spark_exec_total",
+	Help: "The total number of spark-submit runs",
+}, []string{"preset", "status"})
+
+var retryCounter = promauto.NewCounterVec(prometheus.CounterOpts{
+	Name: "retry_total",
+	Help: "The total number of retries",
+}, []string{"preset"})
+
 func (s *Spark) Submit(presetName string) error {
 	args, err := s.submitArgs(presetName)
 	if err != nil {
@@ -125,7 +137,26 @@ func (s *Spark) Submit(presetName string) error {
 	}
 
 	zap.L().Info("submit with args", zap.Any("args", args))
-	go s.exec(args)
+	cmd := exec.Command(s.binaryPath, args...)
+	zap.L().Info("spark-submit", zap.Strings("args", args))
+	if s.debug {
+		writer := &zapio.Writer{Log: zap.L(), Level: zap.DebugLevel}
+		cmd.Stderr = writer
+		cmd.Stdout = writer
+		defer writer.Close()
+	}
+
+	go func() {
+		if err := retry(10, 1*time.Second, 2, 5*time.Minute, func() error {
+			retryCounter.WithLabelValues(presetName).Inc()
+			return cmd.Run()
+		}); err != nil {
+			zap.L().Error("spark submit failed with retries", zap.Error(err))
+			submitCounter.WithLabelValues(presetName, "failure").Inc()
+		}
+		submitCounter.WithLabelValues(presetName, "success").Inc()
+	}()
+
 	return nil
 }
 
@@ -137,7 +168,19 @@ func (s *Spark) buildArgs(kind string, namespace, name string) []string {
 }
 
 func (s *Spark) Kill(namespace, name string) {
-	s.exec(s.buildArgs("kill", namespace, name))
+	args := s.buildArgs("kill", namespace, name)
+	cmd := exec.Command(s.binaryPath, args...)
+	zap.L().Info("spark-submit", zap.Strings("args", args))
+	if s.debug {
+		writer := &zapio.Writer{Log: zap.L(), Level: zap.DebugLevel}
+		cmd.Stderr = writer
+		cmd.Stdout = writer
+		defer writer.Close()
+	}
+
+	if err := cmd.Run(); err != nil {
+		zap.L().Error("killing spark app failed", zap.Error(err))
+	}
 }
 
 func (s *Spark) Status(namespace, name string) string {
@@ -152,23 +195,6 @@ func (s *Spark) Status(namespace, name string) string {
 		zap.L().Error("spark-submit failed", zap.Error(err))
 	}
 	return buffer.String()
-}
-
-func (s *Spark) exec(args []string) {
-	cmd := exec.Command(s.binaryPath, args...)
-	zap.L().Info("spark-submit", zap.Strings("args", args))
-	if s.debug {
-		writer := &zapio.Writer{Log: zap.L(), Level: zap.DebugLevel}
-		cmd.Stderr = writer
-		cmd.Stdout = writer
-		defer writer.Close()
-	}
-
-	if err := retry(10, 1*time.Second, 2, 5*time.Minute, func() error {
-		return cmd.Run()
-	}); err != nil {
-		zap.L().Error("spark submit failed with retries", zap.Error(err))
-	}
 }
 
 func retry(retries int, initialDelay time.Duration, mult int, maxWait time.Duration, fn func() error) error {
