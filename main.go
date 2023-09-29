@@ -28,12 +28,12 @@ import (
 )
 
 type mainCmd struct {
-	SparkHome    string `required:"" default:"/opt/spark" help:"spark home directory" env:"SPARK_HOME"`
-	SparkConfDir string `required:"" help:"directory with spark configuration presets" env:"SPARK_CONF_DIR"`
-	Master       string `required:"" help:"spark master address" env:"SPARK_MASTER"`
-	DebugSubmit  bool   `help:"write spark-submit output to logger" env:"DEBUG_SPARK_SUBMIT"`
-	DevMode      bool   `help:"sets the logger output to development config"`
-	Debug        bool   `help:"enables debug logs" env:"DEBUG"`
+	SparkHome      string `required:"" default:"/opt/spark" help:"spark home directory" env:"SPARK_HOME"`
+	SparkPresetDir string `required:"" help:"directory with spark configuration presets" env:"SPARK_PRESET_DIR"`
+	Master         string `required:"" help:"spark master address" env:"SPARK_MASTER"`
+	DebugSubmit    bool   `help:"write spark-submit output to logger" env:"DEBUG_SPARK_SUBMIT"`
+	DevMode        bool   `help:"sets the logger output to development config"`
+	Debug          bool   `help:"enables debug logs" env:"DEBUG"`
 }
 
 var CLI struct {
@@ -47,7 +47,7 @@ func main() {
 
 func (cmd *mainCmd) Run() {
 	cmd.setupLogger()
-	s, err := spark.New(cmd.SparkHome, cmd.SparkConfDir, cmd.Master, cmd.DebugSubmit)
+	s, err := spark.New(cmd.SparkHome, cmd.SparkPresetDir, cmd.Master, cmd.DebugSubmit)
 	if err != nil {
 		zap.L().Fatal("couldn't initialize spark dependency", zap.Error(err))
 	}
